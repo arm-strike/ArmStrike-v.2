@@ -1,8 +1,11 @@
-﻿using UnityEngine;
-using UnityEngine.UI; // ★UIを操作するために必要です
+using UnityEngine;
+using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
 {
+    [Header("--- 入力ソース ---")]
+    public PlayerInputSourceHost inputSourceHost;
+
     [Header("--- 通常時の移動設定 ---")]
     public float maxForwardSpeed = 20f;
     public float normalTurnSpeed = 90f;
@@ -26,24 +29,22 @@ public class PlayerController : MonoBehaviour
     public float attackScaleMultiplier = 1.5f;
     public float attackOffsetAmount = 1.0f;
 
-    [Header("💥 チャージ振動設定 ---")]
+    [Header(" チャージ振動設定 ---")]
     public float shakeAmount = 0.05f;
     public Transform visualModel;
 
-    [Header("💥 エフェクトの設定")]
+    [Header(" エフェクトの設定")]
     public ParticleSystem chargeEffect;
     public ParticleSystem dashTrailEffect;
 
-    [Header("📊 【新規】UIゲージの設定")]
-    public Slider chargeSlider; // ★ここに作ったSliderをセットします
+    [Header(" 【新規】UIゲージの設定")]
+    public Slider chargeSlider;
 
-    // ギガ・ボルト・ダッシュ用の変数
     [HideInInspector] public bool isGigaDash = false;
     private Renderer ballRenderer;
     private Color originalColor;
     private bool isColorFlashing = false;
 
-    // ★ ゲージの元の色を記憶する用
     private Image sliderFillImage;
     private Color sliderOriginalColor;
 
@@ -52,6 +53,8 @@ public class PlayerController : MonoBehaviour
     private float currentCharge = 0f;
     private bool isPushing = false;
     private Vector3 currentVelocity;
+    private KeyboardInputProvider keyboardInputFallback;
+    private bool hasLoggedMissingInputHostWarning;
 
     private Quaternion leftDefaultRot;
     private Quaternion rightDefaultRot;
@@ -67,7 +70,10 @@ public class PlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         mainCamera = Camera.main;
-        if (mainCamera != null) { defaultFOV = mainCamera.fieldOfView; }
+        if (mainCamera != null)
+        {
+            defaultFOV = mainCamera.fieldOfView;
+        }
 
         leftDefaultRot = Quaternion.Euler(0, -90, 0);
         rightDefaultRot = Quaternion.Euler(0, -90, 0);
@@ -91,10 +97,9 @@ public class PlayerController : MonoBehaviour
             visualModelDefaultPos = Vector3.zero;
         }
 
-        // ★ ゲージの塗りつぶし画像とその色を取得
         if (chargeSlider != null)
         {
-            chargeSlider.value = 0f; // 最初は0
+            chargeSlider.value = 0f;
             if (chargeSlider.fillRect != null)
             {
                 sliderFillImage = chargeSlider.fillRect.GetComponent<Image>();
@@ -118,21 +123,34 @@ public class PlayerController : MonoBehaviour
 
         if (chargeEffect != null) chargeEffect.Stop();
         if (dashTrailEffect != null) dashTrailEffect.Stop();
+
+        if (inputSourceHost == null)
+        {
+            inputSourceHost = GetComponent<PlayerInputSourceHost>();
+        }
+
+        if (keyboardInputFallback == null)
+        {
+            keyboardInputFallback = new KeyboardInputProvider();
+        }
     }
 
     void Update()
     {
-        bool isTurningRight = Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow);
-        bool isTurningLeft = Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow);
-        bool isAttackingLeft = Input.GetKey(KeyCode.J);
-        bool isAttackingRight = Input.GetKey(KeyCode.K);
-        bool pushInput = Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.Space);
+        PlayerInputState inputState = ReadInputState();
+        float turnAxis = inputState.turnAxis;
+        bool isTurningRight = turnAxis > 0f;
+        bool isTurningLeft = turnAxis < 0f;
+        bool isAttackingLeft = inputState.leftAttackHeld;
+        bool isAttackingRight = inputState.rightAttackHeld;
+        bool pushInput = inputState.chargeHeld;
 
         float currentTurnSpeed = pushInput ? pushTurnSpeed : normalTurnSpeed;
-        if (isTurningRight) transform.Rotate(Vector3.up, currentTurnSpeed * Time.deltaTime);
-        else if (isTurningLeft) transform.Rotate(Vector3.up, -currentTurnSpeed * Time.deltaTime);
+        if (turnAxis != 0f)
+        {
+            transform.Rotate(Vector3.up, turnAxis * currentTurnSpeed * Time.deltaTime);
+        }
 
-        // --- 3. プッシュ（チャージ）の計算 ＆ ボルトオーラ演出 ---
         if (pushInput)
         {
             isPushing = true;
@@ -147,16 +165,13 @@ public class PlayerController : MonoBehaviour
                 Random.Range(-currentShake, currentShake)
             );
 
-            // 演出：チャージがMAXになったら電気バチバチ点滅（プレイヤー ＆ ゲージ）
             if (currentCharge >= maxCharge)
             {
                 isColorFlashing = true;
                 float flash = Mathf.PingPong(Time.time * 30f, 1f);
                 Color flashColor = Color.Lerp(Color.white, new Color(0f, 0.8f, 1f), flash);
 
-                // プレイヤーの点滅
                 if (ballRenderer != null) ballRenderer.material.color = flashColor;
-                // ★ 新規：ゲージの点滅
                 if (sliderFillImage != null) sliderFillImage.color = flashColor;
             }
 
@@ -192,7 +207,6 @@ public class PlayerController : MonoBehaviour
             currentCharge = Mathf.MoveTowards(currentCharge, 0f, chargeRate * Time.deltaTime * 2f);
             isPushing = false;
 
-            // 通常速度に近づいたらオーラモードとトレイル、点滅を解除
             if (currentForwardSpeed <= maxForwardSpeed + 2f)
             {
                 isGigaDash = false;
@@ -204,16 +218,13 @@ public class PlayerController : MonoBehaviour
 
                 if (isColorFlashing)
                 {
-                    // プレイヤーの色を元に戻す
                     if (ballRenderer != null) ballRenderer.material.color = originalColor;
-                    // ★ 新規：ゲージの色を元に戻す
                     if (sliderFillImage != null) sliderFillImage.color = sliderOriginalColor;
 
                     isColorFlashing = false;
                 }
             }
 
-            // マックスダッシュ中は、移動中も弾丸っぽく輝かせ続ける
             if (isGigaDash)
             {
                 float flash = Mathf.PingPong(Time.time * 20f, 1f);
@@ -226,7 +237,6 @@ public class PlayerController : MonoBehaviour
             visualModel.localPosition = visualModelDefaultPos;
         }
 
-        // ★ 新規：チャージの値をゲージのUIにリアルタイム反映
         if (chargeSlider != null)
         {
             chargeSlider.value = currentCharge;
@@ -241,7 +251,6 @@ public class PlayerController : MonoBehaviour
         float driftSmoothness = pushInput ? 8f : 3f;
         currentVelocity = Vector3.Lerp(currentVelocity, targetVelocity, Time.deltaTime * driftSmoothness);
 
-        // --- 5. アーム連動 ---
         if (isAttackingLeft)
         {
             leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, Quaternion.Euler(0, -30, 0), swingSpeed * Time.deltaTime);
@@ -251,17 +260,20 @@ public class PlayerController : MonoBehaviour
         else if (pushInput)
         {
             leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, Quaternion.Euler(45f, -90, 0), swingSpeed * Time.deltaTime);
-            leftArm.localScale = leftDefaultScale; leftArm.localPosition = leftDefaultPos;
+            leftArm.localScale = leftDefaultScale;
+            leftArm.localPosition = leftDefaultPos;
         }
         else if (isTurningLeft)
         {
             leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, Quaternion.Euler(25f, -90, 0), swingSpeed * Time.deltaTime);
-            leftArm.localScale = leftDefaultScale; leftArm.localPosition = leftDefaultPos;
+            leftArm.localScale = leftDefaultScale;
+            leftArm.localPosition = leftDefaultPos;
         }
         else
         {
             leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, leftDefaultRot, swingSpeed * Time.deltaTime);
-            leftArm.localScale = leftDefaultScale; leftArm.localPosition = leftDefaultPos;
+            leftArm.localScale = leftDefaultScale;
+            leftArm.localPosition = leftDefaultPos;
         }
 
         if (isAttackingRight)
@@ -273,19 +285,38 @@ public class PlayerController : MonoBehaviour
         else if (pushInput)
         {
             rightArm.localRotation = Quaternion.RotateTowards(rightArm.localRotation, Quaternion.Euler(-45f, -90, 0), swingSpeed * Time.deltaTime);
-            rightArm.localScale = rightDefaultScale; rightArm.localPosition = rightDefaultPos;
+            rightArm.localScale = rightDefaultScale;
+            rightArm.localPosition = rightDefaultPos;
         }
         else if (isTurningRight)
         {
             rightArm.localRotation = Quaternion.RotateTowards(rightArm.localRotation, Quaternion.Euler(-25f, -90, 0), swingSpeed * Time.deltaTime);
-            rightArm.localScale = rightDefaultScale; rightArm.localPosition = rightDefaultPos;
+            rightArm.localScale = rightDefaultScale;
+            rightArm.localPosition = rightDefaultPos;
         }
         else
         {
             rightArm.localRotation = Quaternion.RotateTowards(rightArm.localRotation, rightDefaultRot, swingSpeed * Time.deltaTime);
-            rightArm.localScale = rightDefaultScale; rightArm.localPosition = rightDefaultPos;
+            rightArm.localScale = rightDefaultScale;
+            rightArm.localPosition = rightDefaultPos;
         }
 
         rb.velocity = new Vector3(currentVelocity.x, rb.velocity.y, currentVelocity.z);
+    }
+
+    private PlayerInputState ReadInputState()
+    {
+        if (inputSourceHost != null)
+        {
+            return inputSourceHost.ReadState();
+        }
+
+        if (!hasLoggedMissingInputHostWarning)
+        {
+            hasLoggedMissingInputHostWarning = true;
+            Debug.LogWarning("[PlayerInput] PlayerInputSourceHost was not found on Player. Falling back to Keyboard.");
+        }
+
+        return keyboardInputFallback.ReadState();
     }
 }

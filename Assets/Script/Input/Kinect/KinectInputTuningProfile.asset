@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1888a1939a9b238448bd22287df93b2a, type: 3}
+  m_Name: KinectInputTuningProfile
+  m_EditorClassIdentifier: 
+  inputArmNeutralHoldSeconds: 0.25
+  neutralTurnAxisThreshold: 0.12
+  neutralAttackSpeedThreshold: 0.18
+  neutralChargeExtensionThreshold: 1.05
+  neutralChargeElbowThreshold: 125
+  tPoseHandHeightTolerance: 0.2
+  tPoseSideExtensionThreshold: 0.85
+  turnEnterLeanThreshold: 0.18
+  turnExitLeanThreshold: 0.1
+  turnSensitivity: 2.25
+  turnDepthWeight: 0.45
+  turnLateralWeight: 1
+  turnSmoothing: 10
+  turnDeadZone: 0.05
+  attackArmedForwardMaxMeters: 0.12
+  attackArmedHandHeightMinOffset: -0.2
+  attackArmedHandHeightMaxOffset: 0.2
+  attackArmedExtensionThreshold: 1.05
+  attackForwardDeltaThresholdMeters: 0.2
+  attackElbowAngleThresholdDegrees: 145
+  attackSpeedThreshold: 0.45
+  attackAccelerationThreshold: 3
+  attackSmoothing: 0.35
+  attackExtensionThreshold: 0.95
+  attackPulseSeconds: 0.16
+  attackCooldownSeconds: 0.3
+  chargeEnterExtensionThreshold: 0.95
+  chargeReleaseExtensionThreshold: 1.1
+  chargeElbowAngleThreshold: 125
+  chargeReleaseElbowAngleThreshold: 135
+  chargeHandMinY: 0.15
+  chargeHandMaxY: 0.75
+  releaseHandAboveHeadThreshold: 0.1
+  chargeEnterHoldSeconds: 0.15
+  chargeReleaseHoldSeconds: 0.12

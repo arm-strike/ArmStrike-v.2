@@ -12,10 +12,10 @@ public class Pin : MonoBehaviour
     [Header("このピンの得点")]
     public int pinScore = 10;
 
-    [Header("💥 【新規】ピンのぶっ飛ぶパワー")]
+    [Header(" 【新規】ピンのぶっ飛ぶパワー")]
     public float explosionForce = 30f;
 
-    [Header("💥 【新規】スコアポップアップのPrefab")]
+    [Header(" 【新規】スコアポップアップのPrefab")]
     public GameObject scorePopupPrefab;
 
     private Rigidbody rb;
@@ -49,7 +49,7 @@ public class Pin : MonoBehaviour
         {
             if (rb != null)
             {
-                // 🔥【超絶強化】プレイヤーが「ギガ・ボルト・ダッシュ」状態だった場合
+                // 【超絶強化】プレイヤーが「ギガ・ボルト・ダッシュ」状態だった場合
                 if (player != null && player.isGigaDash)
                 {
                     // 1. スコアをいつもの「2倍」にする！

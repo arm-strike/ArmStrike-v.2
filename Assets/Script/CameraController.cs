@@ -11,7 +11,7 @@ public class CameraController : MonoBehaviour
     [Header("カメラが追従する滑らかさ")]
     public float smoothSpeed = 5f;
 
-    [Header("💥 スピード連動のカスタマイズ")]
+    [Header(" スピード連動のカスタマイズ")]
     public float minFOV = 50f;       // チャージブレーキ（停止）時の視野角
     public float normalFOV = 60f;    // 通常走行時の視野角
     public float maxFOV = 80f;       // 最高速（ロケットダッシュ）時の視野角
@@ -43,7 +43,7 @@ public class CameraController : MonoBehaviour
         // 2. 常にプレイヤーを視野の中心に捉える回転
         transform.LookAt(target.position + Vector3.up * 1f);
 
-        // 3. 💥 スピードに応じた視野角（FOV）の変化
+        // 3.  スピードに応じた視野角（FOV）の変化
         if (cam != null && targetRb != null)
         {
             float currentSpeed = targetRb.velocity.magnitude;
