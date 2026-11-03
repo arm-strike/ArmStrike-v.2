@@ -1,12 +1,33 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
+using UnityEngine.SceneManagement;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.XR;
 
 public class PlayerController : MonoBehaviour
 {
-    [Header("--- 入力ソース ---")]
-    public PlayerInputSourceHost inputSourceHost;
+    [Header("--- プレイヤー識別設定 ---")]
+    [Tooltip("1Pなら 1、2Pなら 2 を設定してください")]
+    public int playerID = 1;
 
-    [Header("--- 通常時の移動設定 ---")]
+    [Header("--- ステータス・HP設定 ---")]
+    public int maxHP = 100;
+    public int currentHP;
+    [Tooltip("別プレイヤーの攻撃が当たったときに受けるダメージ量")]
+    public int attackDamage = 20;
+
+    [Header("--- HP表示UIの設定 ---")]
+    public Text hpText;
+    public TMP_Text hpTextTMP;
+
+    [Header("--- コントローラーのトラッカー参照 ---")]
+    public ControllerTracker leftTracker;
+    public ControllerTracker rightTracker;
+
+    [Header("--- 通常時の移動・自動前進設定 ---")]
+    public float autoForwardSpeed = 5f;
     public float maxForwardSpeed = 20f;
     public float normalTurnSpeed = 90f;
     public float acceleration = 10f;
@@ -20,27 +41,47 @@ public class PlayerController : MonoBehaviour
     public float chargeRate = 150f;
     public float dashForceMultiplier = 0.4f;
 
-    [Header("--- 腕のオブジェクト設定 ---")]
-    public Transform leftArm;
-    public Transform rightArm;
-    public float swingSpeed = 500f;
-
-    [Header("--- 攻撃時の腕のカスタマイズ ---")]
-    public float attackScaleMultiplier = 1.5f;
-    public float attackOffsetAmount = 1.0f;
-
-    [Header(" チャージ振動設定 ---")]
+    [Header("--- チャージ振動設定 ---")]
     public float shakeAmount = 0.05f;
     public Transform visualModel;
 
-    [Header(" エフェクトの設定")]
+    [Header("--- エフェクトの設定 ---")]
     public ParticleSystem chargeEffect;
     public ParticleSystem dashTrailEffect;
 
-    [Header(" 【新規】UIゲージの設定")]
+    [Header("--- UIゲージの設定 ---")]
     public Slider chargeSlider;
 
+    [Header("--- 速度表示UIの設定 ---")]
+    public Text speedText;
+    public TMP_Text speedTextTMP;
+
     [HideInInspector] public bool isGigaDash = false;
+
+    [Header("Hit Effect Settings")]
+    public GameObject hitEffectPrefab;
+    public Transform effectSpawnPoint;
+
+    [Header("--- ゲーム終了の設定 ---")]
+    public float backFlyForce = 35f;
+    public GameObject gameClearImageUI;
+    public GameObject gameOverImageUI;
+    public float displayDelaySeconds = 2.0f;
+
+    [Header("--- 攻撃入力の猶予設定 ---")]
+    public float bothAttackWindow = 0.15f;
+
+    [Header("--- シーン遷移設定 ---")]
+    [Tooltip("ステージ1クリア時の遷移先シーン名")]
+    public string stage2SceneName = "Stage2";
+    [Tooltip("ゲームクリア時またはゲームオーバー時の共通タイトルシーン名")]
+    public string titleSceneName = "TitleScene";
+    [HideInInspector] public bool canReturnToTitle = false;
+
+    [HideInInspector] public bool enableMovement = true;
+
+    public float CurrentSpeed => currentVelocity.magnitude;
+
     private Renderer ballRenderer;
     private Color originalColor;
     private bool isColorFlashing = false;
@@ -53,21 +94,24 @@ public class PlayerController : MonoBehaviour
     private float currentCharge = 0f;
     private bool isPushing = false;
     private Vector3 currentVelocity;
-    private KeyboardInputProvider keyboardInputFallback;
-    private bool hasLoggedMissingInputHostWarning;
 
-    private Quaternion leftDefaultRot;
-    private Quaternion rightDefaultRot;
-    private Vector3 leftDefaultScale;
-    private Vector3 rightDefaultScale;
-    private Vector3 leftDefaultPos;
-    private Vector3 rightDefaultPos;
     private Vector3 visualModelDefaultPos;
     private Camera mainCamera;
     private float defaultFOV;
 
+    private Animator animator;
+
+    private bool isGameOver = false;
+    private bool isGameClear = false;
+
+    private float leftAttackBufferTimer = 0f;
+    private float rightAttackBufferTimer = 0f;
+
     void Start()
     {
+        currentHP = maxHP;
+        UpdateHPUI();
+
         rb = GetComponent<Rigidbody>();
         mainCamera = Camera.main;
         if (mainCamera != null)
@@ -75,12 +119,7 @@ public class PlayerController : MonoBehaviour
             defaultFOV = mainCamera.fieldOfView;
         }
 
-        leftDefaultRot = Quaternion.Euler(0, -90, 0);
-        rightDefaultRot = Quaternion.Euler(0, -90, 0);
-        leftDefaultScale = leftArm.localScale;
-        rightDefaultScale = rightArm.localScale;
-        leftDefaultPos = leftArm.localPosition;
-        rightDefaultPos = rightArm.localPosition;
+        animator = GetComponentInChildren<Animator>();
 
         if (visualModel != null)
         {
@@ -93,8 +132,22 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            visualModel = transform;
-            visualModelDefaultPos = Vector3.zero;
+            visualModel = null;
+        }
+
+        currentForwardSpeed = autoForwardSpeed;
+
+        if (leftTracker == null || rightTracker == null)
+        {
+            ControllerTracker[] trackers = GetComponentsInChildren<ControllerTracker>();
+            foreach (var t in trackers)
+            {
+                if (t.transform.IsChildOf(transform))
+                {
+                    if (t.nodeRole == XRNode.LeftHand && leftTracker == null) leftTracker = t;
+                    if (t.nodeRole == XRNode.RightHand && rightTracker == null) rightTracker = t;
+                }
+            }
         }
 
         if (chargeSlider != null)
@@ -123,35 +176,96 @@ public class PlayerController : MonoBehaviour
 
         if (chargeEffect != null) chargeEffect.Stop();
         if (dashTrailEffect != null) dashTrailEffect.Stop();
-
-        if (inputSourceHost == null)
-        {
-            inputSourceHost = GetComponent<PlayerInputSourceHost>();
-        }
-
-        if (keyboardInputFallback == null)
-        {
-            keyboardInputFallback = new KeyboardInputProvider();
-        }
     }
 
     void Update()
     {
-        PlayerInputState inputState = ReadInputState();
-        float turnAxis = inputState.turnAxis;
-        bool isTurningRight = turnAxis > 0f;
-        bool isTurningLeft = turnAxis < 0f;
-        bool isAttackingLeft = inputState.leftAttackHeld;
-        bool isAttackingRight = inputState.rightAttackHeld;
-        bool pushInput = inputState.chargeHeld;
+        bool chargeHeld = false;
+        float turnAxis = 0f;
 
-        float currentTurnSpeed = pushInput ? pushTurnSpeed : normalTurnSpeed;
-        if (turnAxis != 0f)
+        if (playerID == 1)
         {
-            transform.Rotate(Vector3.up, turnAxis * currentTurnSpeed * Time.deltaTime);
+            chargeHeld = Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.Joystick1Button0);
+        }
+        else if (playerID == 2)
+        {
+            chargeHeld = Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.C) || Input.GetKey(KeyCode.Joystick2Button0);
         }
 
-        if (pushInput)
+        // --- 腕を下げたほうだけに直感的に回転する処理 ---
+        if (leftTracker != null && rightTracker != null)
+        {
+            float leftDrop = leftTracker.DropAmount;   // 左手が下がった量
+            float rightDrop = rightTracker.DropAmount; // 右手が下がった量
+
+            float turnInput = 0f;
+            float dropThreshold = 0.02f; // 反応する下がり幅の閾値
+
+            // 右手を下げたら右回転（プラス）
+            if (rightDrop > dropThreshold && rightDrop > leftDrop)
+            {
+                turnInput = Mathf.Clamp(rightDrop * 5.0f, 0.2f, 1f);
+            }
+            // 左手を下げたら左回転（マイナス）
+            else if (leftDrop > dropThreshold && leftDrop > rightDrop)
+            {
+                turnInput = -Mathf.Clamp(leftDrop * 5.0f, 0.2f, 1f);
+            }
+
+            if (Mathf.Abs(turnInput) > 0.01f)
+            {
+                turnAxis = turnInput;
+            }
+        }
+
+        bool leftAttackDown = (leftTracker != null && leftTracker.attackDown);
+        bool rightAttackDown = (rightTracker != null && rightTracker.attackDown);
+
+        if (isGameOver || isGameClear)
+        {
+            if (canReturnToTitle)
+            {
+                if (leftAttackDown || rightAttackDown || Input.anyKeyDown)
+                {
+                    if (isGameOver)
+                    {
+                        SceneManager.LoadScene(titleSceneName);
+                    }
+                    else if (isGameClear)
+                    {
+                        string currentSceneName = SceneManager.GetActiveScene().name;
+
+                        if (currentSceneName == "Stage2")
+                        {
+                            SceneManager.LoadScene(titleSceneName);
+                        }
+                        else
+                        {
+                            SceneManager.LoadScene(stage2SceneName);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        if (!enableMovement)
+        {
+            currentForwardSpeed = 0f;
+            currentVelocity = Vector3.zero;
+            if (rb != null) rb.velocity = Vector3.zero;
+            return;
+        }
+
+        float currentTurnSpeed = chargeHeld ? pushTurnSpeed : normalTurnSpeed;
+
+        // プレイヤー本体を回転させる
+        if (turnAxis != 0f)
+        {
+            transform.Rotate(Vector3.up, turnAxis * currentTurnSpeed * Time.deltaTime, Space.Self);
+        }
+
+        if (chargeHeld)
         {
             isPushing = true;
             currentForwardSpeed = Mathf.Lerp(currentForwardSpeed, 0f, pushBrakeFactor * Time.deltaTime * 5f);
@@ -159,11 +273,14 @@ public class PlayerController : MonoBehaviour
 
             float chargeRatio = currentCharge / maxCharge;
             float currentShake = shakeAmount * chargeRatio;
-            visualModel.localPosition = visualModelDefaultPos + new Vector3(
-                Random.Range(-currentShake, currentShake),
-                Random.Range(-currentShake, currentShake),
-                Random.Range(-currentShake, currentShake)
-            );
+            if (visualModel != null)
+            {
+                visualModel.localPosition = visualModelDefaultPos + new Vector3(
+                    Random.Range(-currentShake, currentShake),
+                    Random.Range(-currentShake, currentShake),
+                    Random.Range(-currentShake, currentShake)
+                );
+            }
 
             if (currentCharge >= maxCharge)
             {
@@ -188,6 +305,12 @@ public class PlayerController : MonoBehaviour
             {
                 currentForwardSpeed = maxForwardSpeed + (currentCharge * dashForceMultiplier);
 
+                TutorialManager tutorialMgr = FindObjectOfType<TutorialManager>();
+                if (tutorialMgr != null && playerID == 1)
+                {
+                    tutorialMgr.AddDashCount();
+                }
+
                 if (mainCamera != null)
                 {
                     float extraFOV = (currentCharge >= maxCharge) ? 35f : 0f;
@@ -203,7 +326,7 @@ public class PlayerController : MonoBehaviour
                 isPushing = false;
             }
 
-            currentForwardSpeed = Mathf.MoveTowards(currentForwardSpeed, maxForwardSpeed, acceleration * Time.deltaTime);
+            currentForwardSpeed = Mathf.MoveTowards(currentForwardSpeed, autoForwardSpeed, acceleration * Time.deltaTime);
             currentCharge = Mathf.MoveTowards(currentCharge, 0f, chargeRate * Time.deltaTime * 2f);
             isPushing = false;
 
@@ -233,8 +356,6 @@ public class PlayerController : MonoBehaviour
                 if (ballRenderer != null) ballRenderer.material.color = dashFlashColor;
                 if (sliderFillImage != null) sliderFillImage.color = dashFlashColor;
             }
-
-            visualModel.localPosition = visualModelDefaultPos;
         }
 
         if (chargeSlider != null)
@@ -242,81 +363,224 @@ public class PlayerController : MonoBehaviour
             chargeSlider.value = currentCharge;
         }
 
-        if (mainCamera != null)
+        if (mainCamera != null && playerID == 1)
         {
             mainCamera.fieldOfView = Mathf.Lerp(mainCamera.fieldOfView, defaultFOV, Time.deltaTime * 4f);
         }
 
         Vector3 targetVelocity = transform.forward * currentForwardSpeed;
-        float driftSmoothness = pushInput ? 8f : 3f;
+        float driftSmoothness = chargeHeld ? 8f : 3f;
         currentVelocity = Vector3.Lerp(currentVelocity, targetVelocity, Time.deltaTime * driftSmoothness);
 
-        if (isAttackingLeft)
+        if (leftAttackDown) leftAttackBufferTimer = bothAttackWindow;
+        if (rightAttackDown) rightAttackBufferTimer = bothAttackWindow;
+
+        if (leftAttackBufferTimer > 0f) leftAttackBufferTimer -= Time.deltaTime;
+        if (rightAttackBufferTimer > 0f) rightAttackBufferTimer -= Time.deltaTime;
+
+        if (animator != null)
         {
-            leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, Quaternion.Euler(0, -30, 0), swingSpeed * Time.deltaTime);
-            leftArm.localScale = leftDefaultScale * attackScaleMultiplier;
-            leftArm.localPosition = leftDefaultPos + new Vector3(-attackOffsetAmount, 0f, 0f);
-        }
-        else if (pushInput)
-        {
-            leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, Quaternion.Euler(45f, -90, 0), swingSpeed * Time.deltaTime);
-            leftArm.localScale = leftDefaultScale;
-            leftArm.localPosition = leftDefaultPos;
-        }
-        else if (isTurningLeft)
-        {
-            leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, Quaternion.Euler(25f, -90, 0), swingSpeed * Time.deltaTime);
-            leftArm.localScale = leftDefaultScale;
-            leftArm.localPosition = leftDefaultPos;
-        }
-        else
-        {
-            leftArm.localRotation = Quaternion.RotateTowards(leftArm.localRotation, leftDefaultRot, swingSpeed * Time.deltaTime);
-            leftArm.localScale = leftDefaultScale;
-            leftArm.localPosition = leftDefaultPos;
+            animator.SetBool("IsCharging", chargeHeld);
+            animator.SetBool("IsGiga", isGigaDash);
+
+            if (leftAttackBufferTimer > 0f && rightAttackBufferTimer > 0f)
+            {
+                animator.SetTrigger("AttackBoth");
+                leftAttackBufferTimer = 0f;
+                rightAttackBufferTimer = 0f;
+            }
+            else if (leftAttackDown)
+            {
+                animator.SetTrigger("AttackLeft");
+            }
+            else if (rightAttackDown)
+            {
+                animator.SetTrigger("AttackRight");
+            }
         }
 
-        if (isAttackingRight)
+        if (rb != null)
         {
-            rightArm.localRotation = Quaternion.RotateTowards(rightArm.localRotation, Quaternion.Euler(0, -150, 0), swingSpeed * Time.deltaTime);
-            rightArm.localScale = rightDefaultScale * attackScaleMultiplier;
-            rightArm.localPosition = rightDefaultPos + new Vector3(attackOffsetAmount, 0f, 0f);
-        }
-        else if (pushInput)
-        {
-            rightArm.localRotation = Quaternion.RotateTowards(rightArm.localRotation, Quaternion.Euler(-45f, -90, 0), swingSpeed * Time.deltaTime);
-            rightArm.localScale = rightDefaultScale;
-            rightArm.localPosition = rightDefaultPos;
-        }
-        else if (isTurningRight)
-        {
-            rightArm.localRotation = Quaternion.RotateTowards(rightArm.localRotation, Quaternion.Euler(-25f, -90, 0), swingSpeed * Time.deltaTime);
-            rightArm.localScale = rightDefaultScale;
-            rightArm.localPosition = rightDefaultPos;
-        }
-        else
-        {
-            rightArm.localRotation = Quaternion.RotateTowards(rightArm.localRotation, rightDefaultRot, swingSpeed * Time.deltaTime);
-            rightArm.localScale = rightDefaultScale;
-            rightArm.localPosition = rightDefaultPos;
+            rb.velocity = new Vector3(currentVelocity.x, rb.velocity.y, currentVelocity.z);
         }
 
-        rb.velocity = new Vector3(currentVelocity.x, rb.velocity.y, currentVelocity.z);
+        UpdateSpeedUI();
     }
 
-    private PlayerInputState ReadInputState()
+    // --- トリガーによる腕の衝突・ダメージ判定（攻撃中の腕のみ有効） ---
+    void OnTriggerEnter(Collider other)
     {
-        if (inputSourceHost != null)
+        if (isGameOver || isGameClear) return;
+
+        // 1. 当たったオブジェクトが "PlayerArm" タグを持っているか確認
+        if (other.CompareTag("PlayerArm"))
         {
-            return inputSourceHost.ReadState();
+            // 2. その腕の ControllerTracker と、持ち主（PlayerController）を取得
+            ControllerTracker armTracker = other.GetComponentInParent<ControllerTracker>();
+            PlayerController armOwner = other.GetComponentInParent<PlayerController>();
+
+            // 3. 持ち主が存在し、自分以外であり、かつ「その腕が現在攻撃中（パンチを突き出している状態）である」場合のみダメージ
+            if (armOwner != null && armOwner != this && armTracker != null && armTracker.IsAttacking)
+            {
+                TakeDamage(armOwner.attackDamage, transform.position);
+                Debug.Log($"<color=orange>【被弾（攻撃中のみ）】 Player {playerID} が Player {armOwner.playerID} のパンチを受けた！ 残りHP: {currentHP}</color>");
+            }
         }
 
-        if (!hasLoggedMissingInputHostWarning)
+        // --- 従来のピンや敵（Enemy）との判定 ---
+        if (other.GetComponent<Pin>() != null || other.transform.root.GetComponent<Pin>() != null)
         {
-            hasLoggedMissingInputHostWarning = true;
-            Debug.LogWarning("[PlayerInput] PlayerInputSourceHost was not found on Player. Falling back to Keyboard.");
+            return;
         }
 
-        return keyboardInputFallback.ReadState();
+        if (TutorialManager.IsTutorialActive) return;
+
+        GameObject enemyObj = (other.CompareTag("Enemy")) ? other.gameObject :
+                            (other.transform.root != null && other.transform.root.CompareTag("Enemy")) ? other.transform.root.gameObject : null;
+
+        if (enemyObj != null)
+        {
+            Enemy enemy = enemyObj.GetComponent<Enemy>();
+            if (enemy != null)
+            {
+                Vector3 hitPoint = other.transform.position;
+                bool wasDownedBeforeHit = enemy.IsDowned;
+
+                enemy.TakeDamage(Mathf.RoundToInt(Mathf.Max(currentVelocity.magnitude * 5f, 1f)), hitPoint, currentVelocity);
+                PlayHitEffect(hitPoint);
+
+                if (wasDownedBeforeHit || enemy.IsDowned || enemy.IsDefeated)
+                {
+                    currentForwardSpeed *= 0.6f;
+                    TriggerGameClear();
+                }
+                else
+                {
+                    currentForwardSpeed *= 0.3f;
+                    TriggerGameOver();
+                }
+            }
+        }
+    }
+
+    public void TakeDamage(int damage, Vector3 hitPosition)
+    {
+        if (isGameOver || isGameClear) return;
+
+        currentHP -= damage;
+        currentHP = Mathf.Max(currentHP, 0);
+        UpdateHPUI();
+
+        PlayHitEffect(hitPosition);
+
+        if (currentHP <= 0)
+        {
+            TriggerGameOver();
+        }
+    }
+
+    private void UpdateHPUI()
+    {
+        string hpString = string.Format("HP: {0} / {1}", currentHP, maxHP);
+
+        if (hpTextTMP != null)
+        {
+            hpTextTMP.text = hpString;
+        }
+        else if (hpText != null)
+        {
+            hpText.text = hpString;
+        }
+    }
+
+    private void PlayHitEffect(Vector3 position)
+    {
+        if (animator != null) animator.SetTrigger("Hit");
+
+        if (hitEffectPrefab != null)
+        {
+            Instantiate(hitEffectPrefab, position, Quaternion.identity);
+        }
+    }
+
+    private void TriggerGameClear()
+    {
+        isGameClear = true;
+
+        if (playerID == 1)
+        {
+            var camController = Camera.main.GetComponent<CameraController>();
+            if (camController != null)
+            {
+                camController.SetGameClearFOV();
+            }
+        }
+
+        StartCoroutine(GameClearSequenceRoutine());
+    }
+
+    private IEnumerator GameClearSequenceRoutine()
+    {
+        float timer = 0f;
+        while (timer < 1.0f)
+        {
+            timer += Time.deltaTime;
+            currentForwardSpeed = Mathf.Lerp(currentForwardSpeed, 0f, Time.deltaTime * 2f);
+            yield return null;
+        }
+
+        currentForwardSpeed = 0f;
+        currentVelocity = Vector3.zero;
+        if (rb != null) rb.velocity = Vector3.zero;
+
+        yield return new WaitForSeconds(displayDelaySeconds);
+        if (gameClearImageUI != null && playerID == 1) gameClearImageUI.SetActive(true);
+
+        canReturnToTitle = true;
+    }
+
+    private void TriggerGameOver()
+    {
+        isGameOver = true;
+        currentForwardSpeed = 0f;
+        currentVelocity = Vector3.zero;
+
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.velocity = Vector3.zero;
+
+            Vector3 flyDirection = (Vector3.back + Vector3.up * 0.5f).normalized;
+            rb.AddForce(flyDirection * backFlyForce, ForceMode.Impulse);
+            rb.AddTorque(Random.insideUnitSphere * 500f, ForceMode.Impulse);
+        }
+
+        StartCoroutine(GameOverSequenceRoutine());
+    }
+
+    private IEnumerator GameOverSequenceRoutine()
+    {
+        yield return new WaitForSeconds(displayDelaySeconds);
+        if (gameOverImageUI != null && playerID == 1)
+        {
+            gameOverImageUI.SetActive(true);
+        }
+
+        canReturnToTitle = true;
+    }
+
+    private void UpdateSpeedUI()
+    {
+        float speed = currentVelocity.magnitude;
+        string speedString = string.Format("SPEED: {0:F1}", speed);
+
+        if (speedTextTMP != null)
+        {
+            speedTextTMP.text = speedString;
+        }
+        else if (speedText != null)
+        {
+            speedText.text = speedString;
+        }
     }
 }

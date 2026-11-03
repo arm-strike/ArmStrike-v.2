@@ -5,6 +5,11 @@ TagManager:
   serializedVersion: 2
   tags:
   - HardPin
+  - Enemy
+  - Stone
+  - FxTemporaire
+  - PlayerArm
+  - Floor
   layers:
   - Default
   - TransparentFX
@@ -12,11 +17,11 @@ TagManager:
   - 
   - Water
   - UI
-  - 
-  - 
-  - 
-  - 
-  - 
+  - Pin
+  - Enemy
+  - Player
+  - Floor
+  - Arm
   - 
   - 
   - 

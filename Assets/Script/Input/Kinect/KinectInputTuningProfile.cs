@@ -26,12 +26,12 @@ public sealed class KinectInputTuningProfile : ScriptableObject
     [Min(0f)] public float attackArmedHandHeightMinOffset = -0.20f;
     [Min(0f)] public float attackArmedHandHeightMaxOffset = 0.20f;
     [Min(0f)] public float attackArmedExtensionThreshold = 1.05f;
-    [Min(0f)] public float attackForwardDeltaThresholdMeters = 0.20f;
-    [Min(0f)] public float attackElbowAngleThresholdDegrees = 145f;
+    [Min(0f)] public float attackForwardDeltaThresholdMeters = 0.13f;
+    [Min(0f)] public float attackElbowAngleThresholdDegrees = 135f;
     [Min(0f)] public float attackSpeedThreshold = 0.45f;
     [Min(0f)] public float attackAccelerationThreshold = 3.0f;
     [Range(0f, 1f)] public float attackSmoothing = 0.35f;
-    [Min(0f)] public float attackExtensionThreshold = 0.95f;
+    [Min(0f)] public float attackExtensionThreshold = 0.85f;
     [Min(0f)] public float attackPulseSeconds = 0.16f;
     [Min(0f)] public float attackCooldownSeconds = 0.30f;
 

@@ -4,5 +4,39 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
-  m_configObjects: {}
+  m_Scenes:
+  - enabled: 0
+    path: Assets/Scenes/Title.unity
+    guid: 9aeb8c2fde7948249a9759e0006299a9
+  - enabled: 1
+    path: Assets/Scenes/TitleScene.unity
+    guid: 0547a88d9e81c0e4ca09154ef0afdb47
+  - enabled: 1
+    path: Assets/Scenes/Practice.unity
+    guid: ef8514fe07f97b74282bd8fed8853327
+  - enabled: 1
+    path: Assets/Scenes/Tutorial.unity
+    guid: cc8f7430cb9257a4899f2c7c2d9485da
+  - enabled: 0
+    path: Assets/Scenes/Tutorial1.unity
+    guid: d337007ebe863c748b0c7298bcc685ce
+  - enabled: 0
+    path: Assets/Scenes/Tutorial2.unity
+    guid: 8dc2e3b4807479f4ea507e4b83124ca0
+  - enabled: 0
+    path: Assets/Scenes/Tutorial3.unity
+    guid: 4129e4c3521585e498e0e85ebbbb9025
+  - enabled: 0
+    path: Assets/Scenes/Tutorial4.unity
+    guid: aba0014e9a923914397f783caf40f123
+  - enabled: 1
+    path: Assets/Scenes/SampleScene.unity
+    guid: 9fc0d4010bbf28b4594072e72b8655ab
+  - enabled: 1
+    path: Assets/Scenes/Stage2.unity
+    guid: 1e314f7822d61ba4aaefd4fd3679ecc4
+  m_configObjects:
+    Unity.XR.OpenVR.Settings: {fileID: 11400000, guid: a8c8735b87bb4074d8a204e3a0ff171f, type: 2}
+    com.unity.input.settings: {fileID: 11400000, guid: 3734ec4e402a1784a908e11792cd6e41, type: 2}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: eaa2a7fe976fd164db96cc43e33ab5fc, type: 2}
+    com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 314196491585f1c4b9890000e5099a63, type: 2}

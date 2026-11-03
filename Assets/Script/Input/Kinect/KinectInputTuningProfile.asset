@@ -30,12 +30,12 @@ MonoBehaviour:
   attackArmedHandHeightMinOffset: -0.2
   attackArmedHandHeightMaxOffset: 0.2
   attackArmedExtensionThreshold: 1.05
-  attackForwardDeltaThresholdMeters: 0.2
-  attackElbowAngleThresholdDegrees: 145
+  attackForwardDeltaThresholdMeters: 0.13
+  attackElbowAngleThresholdDegrees: 135
   attackSpeedThreshold: 0.45
   attackAccelerationThreshold: 3
   attackSmoothing: 0.35
-  attackExtensionThreshold: 0.95
+  attackExtensionThreshold: 0.85
   attackPulseSeconds: 0.16
   attackCooldownSeconds: 0.3
   chargeEnterExtensionThreshold: 0.95

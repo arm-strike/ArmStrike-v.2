@@ -6,107 +6,147 @@ public class Pin : MonoBehaviour
     [Header("倒れたと判定する傾き角度")]
     public float numberOfDegrees = 45f;
 
-    [Header("消えるまでの時間（秒）")]
-    public float destroyDelay = 2f;
+    [Header("消えるまでの時間（倒れた後の滞留秒数）")]
+    public float destroyDelay = 2.0f;
 
     [Header("このピンの得点")]
     public int pinScore = 10;
 
-    [Header(" 【新規】ピンのぶっ飛ぶパワー")]
+    [Header("ピンのぶっ飛ぶパワー（通常時ベース）")]
     public float explosionForce = 30f;
 
-    [Header(" 【新規】スコアポップアップのPrefab")]
+    [Header("回転の勢い倍率")]
+    public float spinMultiplier = 50f;
+
+    [Header("--- ヒットストップ秒数の設定 ---")]
+    public float gigaHitStopDuration = 0.15f;
+    public float hardPinHitStopDuration = 0.3f;
+
+    [Header("スコアポップアップのPrefab")]
     public GameObject scorePopupPrefab;
+
+    [Header("--- エフェクトの設定 ---")]
+    public GameObject hitByPlayerEffectPrefab;
+
+    [Header("--- SE（効果音）の設定 ---")]
+    public AudioClip normalPinHitSE;  // 通常ピンが弾かれた時のSE
+    public AudioClip specialPinHitSE; // 特殊ピン（HardPinなど）が弾かれた時のSE
+    [Range(0f, 1f)] public float seVolume = 1.0f; // 音量
 
     private Rigidbody rb;
     private bool isFallen = false;
+    private PlayerController lastHitPlayer; // 最後に当てたプレイヤー
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
     }
 
+    // 腕（ArmColliderProxy）などから呼ばれてヒットしたプレイヤーを記録する
+    public void SetLastHitPlayer(PlayerController player)
+    {
+        if (player != null)
+        {
+            lastHitPlayer = player;
+        }
+    }
+
     void Update()
     {
         if (isFallen) return;
 
+        // 1. 角度による倒れた判定
         float angle = Vector3.Angle(transform.up, Vector3.up);
         if (angle > numberOfDegrees)
         {
-            StartCoroutine(FallRoutine());
+            TriggerFallProcess();
         }
     }
 
-    void OnCollisionEnter(Collision collision)
+    // OnCollisionEnter の代わりに OnTriggerEnter を使用（腕が Is Trigger のため）
+    void OnTriggerEnter(Collider other)
     {
         if (isFallen) return;
 
-        // ぶつかった相手からPlayerControllerを取得
-        PlayerController player = collision.transform.root.GetComponent<PlayerController>();
-        bool isHitByPlayer = collision.gameObject.CompareTag("Player") || player != null;
+        PlayerController player = other.transform.root.GetComponent<PlayerController>();
+        bool isHitByPlayer = other.CompareTag("Player") || other.CompareTag("PlayerArm") || player != null;
 
         if (isHitByPlayer)
         {
+            if (player != null)
+            {
+                lastHitPlayer = player;
+            }
+
+            // ArmColliderProxy からプレイヤーが設定されている場合も考慮
+            ArmColliderProxy proxy = other.GetComponent<ArmColliderProxy>();
+            // (ArmColliderProxy側でPin.SetLastHitPlayerが呼ばれているためここではそのまま進行)
+
+            if (hitByPlayerEffectPrefab != null)
+            {
+                Instantiate(hitByPlayerEffectPrefab, transform.position, Quaternion.identity);
+            }
+
+            bool isHardPin = gameObject.CompareTag("HardPin");
+            AudioClip clipToPlay = isHardPin ? specialPinHitSE : normalPinHitSE;
+            if (clipToPlay != null)
+            {
+                AudioSource.PlayClipAtPoint(clipToPlay, transform.position, seVolume);
+            }
+
             if (rb != null)
             {
-                // 【超絶強化】プレイヤーが「ギガ・ボルト・ダッシュ」状態だった場合
-                if (player != null && player.isGigaDash)
+                bool isGiga = (player != null && player.isGigaDash);
+                float impactPlayerSpeed = (player != null) ? player.CurrentSpeed : 20f;
+
+                if (isGiga)
                 {
-                    // 1. スコアをいつもの「2倍」にする！
                     pinScore *= 2;
-
-                    // 2. 特大ヒットストップを発生（一瞬の最大のタメ）
                     if (HitStopManager.instance != null)
                     {
-                        HitStopManager.instance.TriggerHitStop(0.15f);
+                        HitStopManager.instance.TriggerHitStop(gigaHitStopDuration);
                     }
-
-                    // 3. 上空へ音速ですっ飛ばす
-                    rb.velocity = (Vector3.up * 2f + transform.forward).normalized * (explosionForce * 2.5f);
-                    rb.angularVelocity = new Vector3(Random.Range(-50, 50), Random.Range(-50, 50), Random.Range(-50, 50));
-
-                    // 4. 即座に消滅ルーティンへ（通常より早く消します）
-                    destroyDelay = 0.4f;
-                    StartCoroutine(FallRoutine());
-                    return; // 通常の処理をスキップ
                 }
-
-                // --- 以下は以前作った通常＆HardPinの処理（そのまま維持） ---
-                if (gameObject.CompareTag("HardPin"))
+                else if (isHardPin)
                 {
                     if (HitStopManager.instance != null)
                     {
-                        HitStopManager.instance.TriggerHitStop(0.3f);
+                        HitStopManager.instance.TriggerHitStop(hardPinHitStopDuration);
                     }
                 }
 
-                Vector3 hitDirection = (transform.position - collision.transform.position).normalized;
-                Vector3 launchVelocity = (hitDirection + Vector3.up * 0.5f).normalized * explosionForce;
-                rb.velocity = launchVelocity;
-                rb.angularVelocity = new Vector3(Random.Range(-10, 10), Random.Range(-10, 10), Random.Range(-10, 10));
-                StartCoroutine(FallRoutine());
+                Vector3 hitDirection = (transform.position - other.transform.position).normalized;
+                Vector3 launchDirection = (hitDirection + Vector3.up * 0.5f).normalized;
+
+                float spinForce = impactPlayerSpeed * spinMultiplier;
+                rb.AddTorque(transform.right * spinForce, ForceMode.Impulse);
+
+                float baseForce = isGiga ? explosionForce * 2.5f : explosionForce;
+                float finalForce = baseForce * (impactPlayerSpeed / 15f);
+
+                rb.velocity = launchDirection * finalForce;
+                TriggerFallProcess();
             }
         }
     }
 
-    private IEnumerator FallRoutine()
+    private void TriggerFallProcess()
     {
+        if (isFallen) return;
         isFallen = true;
 
-        // 1. スコア加算
-        if (ScoreManager.instance != null)
+        // 4. スコア加算とポップアップ演出
+        if (ScoreManager.Instance != null)
         {
-            ScoreManager.instance.AddScore(pinScore);
+            int targetPlayerID = (lastHitPlayer != null) ? lastHitPlayer.playerID : 1;
+            ScoreManager.Instance.AddScore(targetPlayerID, pinScore);
         }
 
-        // 2. ★演出：ピンの頭上にスコアポップアップを生成
         if (scorePopupPrefab != null)
         {
-            // ピンの少し上の位置
             Vector3 spawnPos = transform.position + Vector3.up * 1.5f;
             GameObject popupObj = Instantiate(scorePopupPrefab, spawnPos, Quaternion.identity);
 
-            // ポップアップに点数を教える
             ScorePopup popup = popupObj.GetComponent<ScorePopup>();
             if (popup != null)
             {
@@ -114,8 +154,18 @@ public class Pin : MonoBehaviour
             }
         }
 
-        // 3. 指定秒数待ってから消去
-        yield return new WaitForSeconds(destroyDelay);
+        // 6. 自動消滅（リスポーン対応の基盤）
+        StartCoroutine(DestroyRoutine(destroyDelay));
+    }
+
+    private IEnumerator DestroyRoutine(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        Destroy(gameObject);
+    }
+
+    public void DestroyObject()
+    {
         Destroy(gameObject);
     }
 }

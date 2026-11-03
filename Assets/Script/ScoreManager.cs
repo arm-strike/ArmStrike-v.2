@@ -1,45 +1,57 @@
 using UnityEngine;
-using TMPro; // ★ TextMeshProを使うために必要
+using TMPro;
+using UnityEngine.UI;
+using System.Collections.Generic;
 
 public class ScoreManager : MonoBehaviour
 {
-    public static ScoreManager instance;
+    public static ScoreManager Instance { get; private set; }
 
-    [Header("スコアを表示するTextMeshProテキスト")]
-    public TextMeshProUGUI scoreText;
+    [Header("--- 各プレイヤーのスコア ---")]
+    private Dictionary<int, int> playerScores = new Dictionary<int, int>();
 
-    [Header("スコアの前に表示する文字")]
-    public string scoreLabel = "SCORE: ";
-
-    private int score = 0;
+    [Header("--- UI表示設定 ---")]
+    [Tooltip("各プレイヤーのスコアを表示するUIテキスト（1P, 2Pの順に登録）")]
+    public List<TMP_Text> scoreTextTMPs = new List<TMP_Text>();
+    public List<Text> scoreTexts = new List<Text>();
 
     void Awake()
     {
-        if (instance == null)
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
+    }
+
+    public void AddScore(int playerID, int amount)
+    {
+        if (!playerScores.ContainsKey(playerID))
         {
-            instance = this;
+            playerScores[playerID] = 0;
         }
+
+        playerScores[playerID] += amount;
+        Debug.Log($"<color=yellow>【スコア加算】 Player {playerID} に +{amount}点！ 現在のスコア: {playerScores[playerID]}</color>");
+
+        UpdateScoreUI(playerID);
     }
 
-    void Start()
+    public int GetScore(int playerID)
     {
-        // ゲーム開始時にテキストを「SCORE: 0」に初期化
-        UpdateScoreText();
+        return playerScores.ContainsKey(playerID) ? playerScores[playerID] : 0;
     }
 
-    // ピンが倒れたときに呼び出される関数
-    public void AddScore(int points)
+    private void UpdateScoreUI(int playerID)
     {
-        score += points;
-        UpdateScoreText(); // スコアが増えるたびに表示を更新
-    }
+        int score = GetScore(playerID);
+        int index = playerID - 1; // 1Pならインデックス0
 
-    // テキストの表示を更新する処理
-    void UpdateScoreText()
-    {
-        if (scoreText != null)
+        if (index >= 0 && index < scoreTextTMPs.Count && scoreTextTMPs[index] != null)
         {
-            scoreText.text = scoreLabel + score.ToString();
+            scoreTextTMPs[index].text = $"P{playerID} Score: {score}";
+        }
+
+        if (index >= 0 && index < scoreTexts.Count && scoreTexts[index] != null)
+        {
+            scoreTexts[index].text = $"P{playerID} Score: {score}";
         }
     }
 }
